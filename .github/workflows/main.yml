@@ -119,7 +119,7 @@ jobs:
       - name: Package kernel
         run: |
           cd scripts/tools/AnyKernel3
-          cp ../.."/xiaomi_kernel_odin/out/arch/arm64/boot/Image" Image
+          cp ../../xiaomi_kernel_odin/out/arch/arm64/boot/Image Image
           if [ "${{ env.KPM }}" = "1" ]; then
             cp ../root/SukiSU-Ultra/patch_linux .
             ./patch_linux
