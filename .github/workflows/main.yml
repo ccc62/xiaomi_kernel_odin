@@ -1,51 +1,52 @@
-name: Xiaomi Odin Kernel CI Build (via build.sh)
+name: 小米 Odin 内核 CI 构建（通过 build.sh）
 
 on:
   push:
     branches:
-      - main
+      - main  # 推送main分支时触发构建
   workflow_dispatch:
     inputs:
       root_choice:
         type: choice
         description: 选择ROOT方案
         options:
-          - kernelsu_next   # 对应build.sh选项1
-          - kernelsu_stable # 对应build.sh选项2
-          - suki_su_ultra   # 对应build.sh选项3
-          - mksu_root       # 对应build.sh选项4
-        default: kernelsu_next
+          - 1  # Kernelsu-next+susfs（对应build.sh选项1）
+          - 2  # Kernelsu Stable+susfs（对应build.sh选项2）
+          - 3  # SukiSU Ultra+susfs（对应build.sh选项3）
+          - 4  # MKSU Root+susfs（对应build.sh选项4）
+        default: 1  # 默认选择Kernelsu-next
 
 jobs:
   build_kernel:
-    runs-on: ubuntu-22.04  # 与build.sh兼容的Ubuntu版本
-    timeout-minutes: 120   # 延长编译超时时间
+    runs-on: ubuntu-22.04  # 推荐使用较新的Ubuntu版本（兼容多数工具链）
+    timeout-minutes: 120    # 内核编译耗时较长，延长超时时间
     env:
-      KERNEL_DIR: xiaomi_kernel_odin
-      # 传递root选择到环境变量（供build.sh读取）
-      BUILD_SH_ROOT_CHOICE: ${{ github.event.inputs.root_choice }}
+      KERNEL_DIR: xiaomi_kernel_odin  # 内核目录（与build.sh一致）
+      ROOT_CHOICE: ${{ github.event.inputs.root_choice }}  # 传递ROOT选择到环境变量
 
     steps:
       - name: 克隆仓库（含子模块）
         uses: actions/checkout@v4
         with:
-          submodules: recursive  # 确保拉取AnyKernel3等子模块
+          submodules: recursive  # 递归拉取子模块（如AnyKernel3、工具链等）
 
-      - name: 赋予build.sh执行权限
-        run: chmod +x ${{ env.KERNEL_DIR }}/build.sh
+      - name: 赋予 build.sh 执行权限
+        run: chmod +x ${{ env.KERNEL_DIR }}/build.sh  # 确保脚本可执行
 
-      - name: 运行build.sh（非交互式模式）
+      - name: 运行 build.sh（非交互式模式）
         run: |
-          cd ${{ env.KERNEL_DIR }}
-          # 导出环境变量（替代build.sh的交互式输入）
-          export ROOT_CHOICE=${BUILD_SH_ROOT_CHOICE}
-          # 执行脚本（跳过menuconfig，添加-n参数静默模式）
-          ./build.sh -n  # 假设添加-n参数表示非交互式（需修改build.sh逻辑）
+          cd ${{ env.KERNEL_DIR }}  # 进入内核目录
+          ./build.sh -n  # -n 表示非交互式模式（build.sh中定义）
 
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-package
-          paths:
-            - "../*.zip"    # build.sh默认将ZIP生成到仓库根目录
-            - "kernel.log"  # build.sh生成的编译日志
+          name: 内核包与日志
+          paths:  # 关键修正：路径直接指向仓库根目录（build.sh生成位置）
+            - "*.zip"    # 内核ZIP包（build.sh默认生成到仓库根目录）
+            - "kernel.log"  # 编译日志（build.sh生成到仓库根目录）
+
+      - name: 显示构建完成信息（可选）
+        run: |
+          echo -e "${GREEN}内核构建完成！产物已上传至 artifacts${NC}"
+          ls -lh *.zip  # 打印生成的ZIP文件信息
