@@ -1,0 +1,137 @@
+name: Build Xiaomi Odin Kernel (Android 5.4)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      root_option:
+        type: choice
+        description: Select the root method
+        options:
+          - ksu_next
+          - ksu
+          - suki_su
+          - mksu
+        default: "ksu_next"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      DEFCONFIG: "odin_defconfig"
+      KBUILD_BUILD_USER: "18201329"
+      KBUILD_BUILD_HOST: "qq.com"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup environment
+        run: |
+          sudo apt update && sudo apt install -y --no-install-recommends \
+            git flex bison libssl-dev libelf-dev zip unzip ccache
+          echo "Setting up PATH"
+          export PATH="${PWD}/xiaomi_kernel_odin/scripts/tools/clang-r383902b1/bin:${PWD}/xiaomi_kernel_odin/scripts/tools/aarch64-linux-android-4.9/bin:$PATH"
+
+      - name: Prepare build args
+        id: build_args
+        run: |
+          echo "::set-output name=args:: -j$(nproc) O=out CC=clang ARCH=arm64 SUBARCH=arm64 LD=ld.lld AR=llvm-ar NM=llvm-nm STRIP=llvm-strip OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump READELF=llvm-readelf HOSTCC=clang HOSTCXX=clang++ HOSTAR=llvm-ar HOSTLD=ld.lld CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- LLVM=1 LLVM_IAS=1"
+
+      - name: Copy selected root module
+        run: |
+          ROOT_DIR="xiaomi_kernel_odin/drivers/kernelsu"
+          case "${{ github.event.inputs.root_option }}" in
+            "ksu_next")
+              cp -r xiaomi_kernel_odin/scripts/tools/root/Kernelsu-next/kernelsu "${ROOT_DIR}"
+              echo "Enabled: Kernelsu-next + sufs"
+              ;;
+            "ksu")
+              cp -r xiaomi_kernel_odin/scripts/tools/root/Kernelsu/kernelsu "${ROOT_DIR}"
+              cp -r xiaomi_kernel_odin/scripts/tools/root/Kernelsu/ksuversion xiaomi_kernel_odin/ksuversion
+              echo "Enabled: Kernelsu + sufs"
+              ;;
+            "suki_su")
+              cp -r xiaomi_kernel_odin/scripts/tools/root/SukiSU-Ultra/kernelsu "${ROOT_DIR}"
+              echo "Enabled: SukiSU-Ultra + sufs"
+              KPM=1
+              ;;
+            "mksu")
+              cp -r xiaomi_kernel_odin/scripts/tools/root/MKSU/kernelsu "${ROOT_DIR}"
+              echo "Enabled: MKSU + sufs"
+              ;;
+            *)
+              echo "Invalid root option"
+              exit 1
+              ;;
+          esac
+
+      - name: Configure kernel
+        run: |
+          cd xiaomi_kernel_odin
+          make O=out ARCH=arm64 $DEFCONFIG
+          make O=out ARCH=arm64 menuconfig
+          make O=out ARCH=arm64 savedefconfig
+          cp out/defconfig arch/arm64/configs/$DEFCONFIG
+
+      - name: Build kernel
+        id: build_kernel
+        run: |
+          cd xiaomi_kernel_odin
+          START_TIME=$(date +%s)
+          if ! make ${args} 2>&1 | tee ../kernel.log; then
+            echo "Build failed, check logs"
+            exit 1
+          fi
+          END_TIME=$(date +%s)
+          echo "::set-output name=build_time:: $((END_TIME - START_TIME))"
+
+      - name: Install modules (if any)
+        if: contains(grep -F '=' xiaomi_kernel_odin/out/.config | grep '=m', '1')
+        run: |
+          cd xiaomi_kernel_odin
+          make ${args} INSTALL_MOD_PATH=modules INSTALL_MOD_STRIP=1 modules_install
+          cd ../scripts/tools/AnyKernel3
+          cp $(find "../.."/out/modules/lib/modules/5.4* -name '*.ko') modules/vendor/lib/modules/
+          cp "../.."/out/modules/lib/modules/5.4/modules.{alias,dep,softdep} modules/vendor/lib/modules/
+          cp "../.."/out/modules/lib/modules/5.4/modules.order modules/vendor/lib/modules/modules.load
+          sed -i 's/.*\///g' modules/vendor/lib/modules/modules.load
+          sed -i 's/do.modules=0/do.modules=1/g' anykernel.sh
+
+      - name: Package kernel
+        run: |
+          cd scripts/tools/AnyKernel3
+          cp ../.."/xiaomi_kernel_odin/out/arch/arm64/boot/Image" Image
+          if [ "${KPM}" = "1" ]; then
+            cp ../root/SukiSU-Ultra/patch_linux .
+            ./patch_linux
+            mv -f oImage Image
+            rm -f patch_linux
+          fi
+          if [ -d ".git" ]; then
+            GIT_COMMIT_HASH=$(git -C ../.. rev-parse --short=7 HEAD)
+            ZIP_NAME="MIX4-5.4.289-g${GIT_COMMIT_HASH}.zip"
+          else
+            ZIP_NAME="MIX4-5.4.289-$(date '+%Y%m%d%H%M').zip"
+          fi
+          zip -r9 "${ZIP_NAME}" *
+          mv "${ZIP_NAME}" ../../..
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: kernel-build
+          path: |
+            kernel.log
+            *.zip
+
+      - name: Print build summary
+        run: |
+          echo "✅ Build completed in $(( ${{ steps.build_kernel.outputs.build_time }} / 60 )) min $(( ${{ steps.build_kernel.outputs.build_time }} % 60 )) sec"
+          echo "📦 Kernel ZIP: $(ls *.zip)"
