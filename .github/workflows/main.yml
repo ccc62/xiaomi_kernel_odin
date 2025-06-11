@@ -136,12 +136,12 @@ jobs:
           mv "${ZIP_NAME}" ../../..
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: kernel-build
-          path: |
-            kernel.log
-            *.zip
+          paths:
+            - kernel.log
+            - '*.zip'
 
       - name: Print build summary
         run: |
