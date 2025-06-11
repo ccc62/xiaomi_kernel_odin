@@ -25,6 +25,7 @@ jobs:
       DEFCONFIG: "odin_defconfig"
       KBUILD_BUILD_USER: "18201329"
       KBUILD_BUILD_HOST: "qq.com"
+      KPM: "0"
 
     steps:
       - name: Checkout repository
@@ -60,7 +61,7 @@ jobs:
             "suki_su")
               cp -r xiaomi_kernel_odin/scripts/tools/root/SukiSU-Ultra/kernelsu "${ROOT_DIR}"
               echo "Enabled: SukiSU-Ultra + sufs"
-              KPM=1
+              echo "KPM=1" >> $GITHUB_ENV
               ;;
             "mksu")
               cp -r xiaomi_kernel_odin/scripts/tools/root/MKSU/kernelsu "${ROOT_DIR}"
@@ -92,8 +93,19 @@ jobs:
           END_TIME=$(date +%s)
           echo "::set-output name=build_time:: $((END_TIME - START_TIME))"
 
-      - name: Install modules (if any)
-        if: contains(grep -F '=' xiaomi_kernel_odin/out/.config | grep '=m', '1')
+      - name: Check for modules
+        id: check_modules
+        run: |
+          if grep -q '=m' xiaomi_kernel_odin/out/.config; then
+            echo "Modules found"
+            echo "::set-output name=has_modules::true"
+          else
+            echo "No modules found"
+            echo "::set-output name=has_modules::false"
+          fi
+
+      - name: Install modules
+        if: steps.check_modules.outputs.has_modules == 'true'
         run: |
           cd xiaomi_kernel_odin
           make ${args} INSTALL_MOD_PATH=modules INSTALL_MOD_STRIP=1 modules_install
@@ -108,7 +120,7 @@ jobs:
         run: |
           cd scripts/tools/AnyKernel3
           cp ../.."/xiaomi_kernel_odin/out/arch/arm64/boot/Image" Image
-          if [ "${KPM}" = "1" ]; then
+          if [ "${{ env.KPM }}" = "1" ]; then
             cp ../root/SukiSU-Ultra/patch_linux .
             ./patch_linux
             mv -f oImage Image
