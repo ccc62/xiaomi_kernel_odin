@@ -1,4 +1,4 @@
-name: Xiaomi Odin Kernel CI Build (Android 5.4)
+name: Xiaomi Odin Kernel CI Build (Automated)
 
 on:
   push:
@@ -8,139 +8,148 @@ on:
     inputs:
       root_choice:
         type: choice
-        description: Choose root implementation
+        description: 选择ROOT方案
         options:
-          - kernelsu_next
-          - kernelsu_stable
-          - suki_su_ultra
-          - mksu_root
+          - kernelsu_next   # 对应build.sh选项1
+          - kernelsu_stable # 对应build.sh选项2
+          - suki_su_ultra   # 对应build.sh选项3
+          - mksu_root       # 对应build.sh选项4
         default: kernelsu_next
 
 jobs:
   build_kernel:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-
+    runs-on: ubuntu-22.04  # 选择与build.sh兼容的Ubuntu版本（建议20.04+）
+    timeout-minutes: 120   # 延长超时时间（内核编译耗时较长）
     env:
-      TARGET_DEFCONFIG: "odin_defconfig"
-      BUILD_USER: "xiaomi_kernel_builder"
-      BUILD_HOST: "github_actions"
-      KPM_FLAG: "0"
+      KERNEL_DIR: xiaomi_kernel_odin
+      ANYKERNEL_DIR: ${{ env.KERNEL_DIR }}/scripts/tools/AnyKernel3
+      DEFCONFIG: odin_defconfig
+      # 全局环境变量（对应build.sh的path函数）
+      KBUILD_BUILD_USER: "18201329"
+      KBUILD_BUILD_HOST: "qq.com"
+      PATH: ${{ env.KERNEL_DIR }}/scripts/tools/clang-r383902b1/bin:${{ env.KERNEL_DIR }}/scripts/tools/aarch64-linux-android-4.9/bin:${{ env.KERNEL_DIR }}/scripts/tools/arm-linux-androideabi-4.9/bin:${{ env.PATH }}
 
     steps:
-      - name: Clone repository with submodules
+      - name: 克隆仓库（含子模块）
         uses: actions/checkout@v4
         with:
-          submodules: true
+          submodules: recursive  # 递归拉取子模块（如AnyKernel3）
 
-      - name: Setup build environment
+      - name: 安装依赖（对应build.sh的install函数）
         run: |
-          sudo apt update
-          sudo apt install -y git flex bison libssl-dev libelf-dev zip unzip ccache
-          export PATH="${PWD}/xiaomi_kernel_odin/scripts/tools/clang-r383902b1/bin:${PWD}/xiaomi_kernel_odin/scripts/tools/aarch64-linux-android-4.9/bin:$PATH"
+          sudo apt update && sudo apt install -y \
+            git ccache automake flex lzop bison gperf build-essential zip curl \
+            zlib1g-dev zlib1g-dev:i386 g++-multilib python-networkx libxml2-utils \
+            bzip2 libbz2-dev libbz2-1.0 squashfs-tools pngcrush schedtool \
+            dpkg-dev liblz4-tool make optipng maven libssl-dev pwgen \
+            libswitch-perl policycoreutils minicom libxml-sax-base-perl \
+            libxml-simple-perl bc libc6-dev-i386 lib32ncurses5-dev \
+            x11proto-core-dev libx11-dev lib32z1-dev libgl1-mesa-dev \
+            xsltproc unzip openjdk-17-jdk
 
-      - name: Configure build arguments
-        id: build_vars
+      - name: 配置ROOT方案（对应build.sh的root函数）
         run: |
-          echo "::set-output name=build_flags:: -j$(nproc) O=out CC=clang ARCH=arm64 SUBARCH=arm64 LD=ld.lld AR=llvm-ar NM=llvm-nm STRIP=llvm-strip OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump READELF=llvm-readelf HOSTCC=clang HOSTCXX=clang++ HOSTAR=llvm-ar HOSTLD=ld.lld CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- LLVM=1 LLVM_IAS=1"
+          ROOT_DIR=${{ env.KERNEL_DIR }}/drivers/kernelsu
+          KSU_NEXT_DIR=${{ env.KERNEL_DIR }}/scripts/tools/root/Kernelsu-next
+          KSU_DIR=${{ env.KERNEL_DIR }}/scripts/tools/root/Kernelsu
+          SUKISU_DIR=${{ env.KERNEL_DIR }}/scripts/tools/root/SukiSU-Ultra
+          MKSU_DIR=${{ env.KERNEL_DIR }}/scripts/tools/root/MKSU
 
-      - name: Install root module
-        run: |
-          MODULE_PATH="xiaomi_kernel_odin/drivers/kernelsu"
+          # 清理旧ROOT文件
+          rm -rf "$ROOT_DIR" "${{ env.KERNEL_DIR }}/ksuversion"
+          export KPM_FLAG=0  # 初始化KPM_FLAG
+
           case "${{ github.event.inputs.root_choice }}" in
             kernelsu_next)
-              cp -r xiaomi_kernel_odin/scripts/tools/root/Kernelsu-next/kernelsu "${MODULE_PATH}"
-              echo "Activated: Kernelsu Next + sufs"
+              cp -r "$KSU_NEXT_DIR"/kernelsu "$ROOT_DIR"
+              echo "启用：Kernelsu-next+susfs"
               ;;
             kernelsu_stable)
-              cp -r xiaomi_kernel_odin/scripts/tools/root/Kernelsu/kernelsu "${MODULE_PATH}"
-              cp -r xiaomi_kernel_odin/scripts/tools/root/Kernelsu/ksuversion xiaomi_kernel_odin/ksuversion
-              echo "Activated: Kernelsu Stable + sufs"
+              cp -r "$KSU_DIR"/kernelsu "$ROOT_DIR"
+              cp -r "$KSU_DIR"/ksuversion "${{ env.KERNEL_DIR }}"/ksuversion
+              echo "启用：Kernelsu Stable+susfs"
               ;;
             suki_su_ultra)
-              cp -r xiaomi_kernel_odin/scripts/tools/root/SukiSU-Ultra/kernelsu "${MODULE_PATH}"
-              echo "Activated: SukiSU Ultra + sufs"
-              echo "KPM_FLAG=1" >> $GITHUB_ENV
+              cp -r "$SUKISU_DIR"/kernelsu "$ROOT_DIR"
+              echo "启用：SukiSU Ultra+susfs"
+              export KPM_FLAG=1  # 设置KPM_FLAG为1
               ;;
             mksu_root)
-              cp -r xiaomi_kernel_odin/scripts/tools/root/MKSU/kernelsu "${MODULE_PATH}"
-              echo "Activated: MKSU Root + sufs"
+              cp -r "$MKSU_DIR"/kernelsu "$ROOT_DIR"
+              echo "启用：MKSU Root+susfs"
               ;;
             *)
-              echo "Invalid root option selected"
+              echo "无效的ROOT选项"
               exit 1
               ;;
           esac
+          # 导出环境变量（供后续步骤使用）
+          echo "KPM_FLAG=$KPM_FLAG" >> $GITHUB_ENV
 
-      - name: Generate kernel config
+      - name: 编译内核（对应build.sh的build函数，移除menuconfig）
         run: |
-          cd xiaomi_kernel_odin
-          make O=out ARCH=arm64 $TARGET_DEFCONFIG
-          make O=out ARCH=arm64 menuconfig
+          cd ${{ env.KERNEL_DIR }}
+          # 生成配置
+          make O=out ARCH=arm64 ${{ env.DEFCONFIG }}
           make O=out ARCH=arm64 savedefconfig
-          cp out/defconfig arch/arm64/configs/$TARGET_DEFCONFIG
+          cp out/defconfig arch/arm64/configs/${{ env.DEFCONFIG }}
+          # 正式编译（参数对应build.sh的args变量）
+          make -j$(nproc) O=out ARCH=arm64 \
+            CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm \
+            STRIP=llvm-strip OBJCOPY=llvm-objcopy \
+            OBJDUMP=llvm-objdump READELF=llvm-readelf \
+            HOSTCC=clang HOSTCXX=clang++ HOSTAR=llvm-ar \
+            HOSTLD=ld.lld CLANG_TRIPLE=aarch64-linux-gnu- \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
+            LLVM=1 LLVM_IAS=1 2>&1 | tee ../kernel_build.log
 
-      - name: Compile kernel
-        id: compile
+      - name: 打包内核（对应build.sh的package函数）
         run: |
-          cd xiaomi_kernel_odin
-          START=$(date +%s)
-          if ! make ${build_flags} 2>&1 | tee ../kernel_build.log; then
-            echo "Build failed - see kernel_build.log"
-            exit 1
+          cd ${{ env.KERNEL_DIR }}
+          # 处理模块（如果有）
+          if grep -q '=m' out/.config; then
+            make -j$(nproc) O=out ARCH=arm64 \
+              INSTALL_MOD_PATH=modules INSTALL_MOD_STRIP=1 modules_install
+            cd ${{ env.ANYKERNEL_DIR }}
+            # 复制模块文件
+            cp $(find ../out/modules/lib/modules/5.4* -name '*.ko') modules/vendor/lib/modules/
+            cp ../out/modules/lib/modules/5.4/modules.{alias,dep,softdep} modules/vendor/lib/modules/
+            cp ../out/modules/lib/modules/5.4/modules.order modules/vendor/lib/modules/modules.load
+            # 修复模块路径
+            sed -i 's/.*\///g' modules/vendor/lib/modules/modules.load
+            sed -i 's/do.modules=0/do.modules=1/g' anykernel.sh
           fi
-          END=$(date +%s)
-          echo "::set-output name=duration:: $((END - START))"
-
-      - name: Check for kernel modules
-        id: check_mods
-        run: |
-          if grep -q '=m' xiaomi_kernel_odin/out/.config; then
-            echo "::set-output name=has_modules::true"
-          else
-            echo "::set-output name=has_modules::false"
-          fi
-
-      - name: Install modules
-        if: steps.check_mods.outputs.has_modules == 'true'  # 修正此处格式（无多余空格，引号匹配）
-        run: |
-          cd xiaomi_kernel_odin
-          make ${build_flags} INSTALL_MOD_PATH=modules INSTALL_MOD_STRIP=1 modules_install
-          cd ../scripts/tools/AnyKernel3
-          cp $(find "../.."/out/modules/lib/modules/5.4* -name '*.ko') modules/vendor/lib/modules/
-          cp "../.."/out/modules/lib/modules/5.4/modules.{alias,dep,softdep} modules/vendor/lib/modules/
-          cp "../.."/out/modules/lib/modules/5.4/modules.order modules/vendor/lib/modules/modules.load
-          sed -i 's/.*\///g' modules/vendor/lib/modules/modules.load
-          sed -i 's/do.modules=0/do.modules=1/g' anykernel.sh
-
-      - name: Package kernel zip
-        run: |
-          cd scripts/tools/AnyKernel3
-          cp ../../xiaomi_kernel_odin/out/arch/arm64/boot/Image Image
-          if [ "${{ env.KPM_FLAG }}" = "1" ]; then
+          # 复制内核镜像
+          cd ${{ env.ANYKERNEL_DIR }}
+          cp ../out/arch/arm64/boot/Image Image
+          # 处理SukiSU-Ultra的patch（如果启用）
+          if [ "$KPM_FLAG" = "1" ]; then
             cp ../root/SukiSU-Ultra/patch_linux .
             ./patch_linux
             mv -f oImage Image
             rm -f patch_linux
           fi
+          # 生成ZIP包
           if [ -d ".git" ]; then
-            COMMIT=$(git -C ../.. rev-parse --short=7 HEAD)
-            ZIP_NAME="XiaomiOdin-5.4.289-g${COMMIT}.zip"
+            GIT_COMMIT=$(git -C ../ rev-parse --short=7 HEAD)
+            ZIP_NAME="MIX4-5.4.289-g${GIT_COMMIT}.zip"
           else
-            ZIP_NAME="XiaomiOdin-5.4.289-$(date '+%Y%m%d%H%M').zip"
+            ZIP_NAME="MIX4-5.4.289-$(date '+%Y%m%d%H%M').zip"
           fi
-          zip -r9 "${ZIP_NAME}" *
-          mv "${ZIP_NAME}" ../../..
+          zip -r9 "$ZIP_NAME" *
+          mv "$ZIP_NAME" ../..  # 移动到仓库根目录
 
-      - name: Upload build artifacts
+      - name: 上传构建产物
         uses: actions/upload-artifact@v4
         with:
-          name: kernel_artifacts
+          name: kernel-package
           paths:
-            - kernel_build.log
             - "*.zip"
+            - kernel_build.log
 
-      - name: Display build stats
+      - name: 清理临时文件（可选）
         run: |
-          echo "Build completed in $(( ${{ steps.compile.outputs.duration }} / 60 )) minutes"
-          echo "Generated ZIP: $(ls *.zip)"
+          rm -rf ${{ env.KERNEL_DIR }}/out
+          rm -rf ${{ env.ANYKERNEL_DIR }}/Image
+          rm -rf ${{ env.ANYKERNEL_DIR }}/modules/vendor/lib/modules/*
