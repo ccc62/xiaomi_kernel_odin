@@ -141,7 +141,7 @@ jobs:
           name: kernel-build
           paths:
             - kernel.log
-            - '*.zip'
+            - "*.zip"
 
       - name: Print build summary
         run: |
