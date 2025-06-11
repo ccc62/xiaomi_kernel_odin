@@ -145,5 +145,5 @@ jobs:
 
       - name: Print build summary
         run: |
-          echo "✅ Build completed in $(( ${{ steps.build_kernel.outputs.build_time }} / 60 )) min $(( ${{ steps.build_kernel.outputs.build_time }} % 60 )) sec"
-          echo "📦 Kernel ZIP: $(ls *.zip)"
+          echo "Build completed in $(( ${{ steps.build_kernel.outputs.build_time }} / 60 )) min $(( ${{ steps.build_kernel.outputs.build_time }} % 60 )) sec"
+          echo "Kernel ZIP: $(ls *.zip)"
