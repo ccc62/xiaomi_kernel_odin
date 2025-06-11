@@ -102,7 +102,7 @@ jobs:
           fi
 
       - name: Install modules
-        if: steps.check_mods.outputs.has_modules == 'true'
+        if: steps.check_mods.outputs.has_modules == 'true'  # 修正此处格式（无多余空格，引号匹配）
         run: |
           cd xiaomi_kernel_odin
           make ${build_flags} INSTALL_MOD_PATH=modules INSTALL_MOD_STRIP=1 modules_install
