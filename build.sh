@@ -135,7 +135,7 @@ build() {
 # 打包内核
 package() {
     cd "${KERNEL_DIR}"
-    echo -e "${YELLOW}处理模块...${NC}"
+    echo -e "${YELLOW}开始处理内核模块...${NC}"
     if grep -q '=m' "out/.config"; then
         make ${BUILD_ARGS} INSTALL_MOD_PATH=modules INSTALL_MOD_STRIP=1 modules_install
         cd "${ANYKERNEL_DIR}"
@@ -146,7 +146,7 @@ package() {
         sed -i 's/do.modules=0/do.modules=1/g' anykernel.sh
     fi
 
-    echo -e "${YELLOW}打包 ZIP...${NC}"
+    echo -e "${YELLOW}开始打包内核ZIP...${NC}"
     cd "${ANYKERNEL_DIR}"
     cp "${IMAGE_DIR}" "Image"
 
@@ -158,13 +158,13 @@ package() {
     fi
 
     zip -r9 "${ZIP_NAME}" * -x "out/*" "*/out/*"
-    mv "${ZIP_NAME}" "${CURRENT_DIR}"
+    mv "${ZIP_NAME}" "${GITHUB_WORKSPACE}"  # 关键修复！
 
     END_TIME=$(date +%s)
     COST_TIME=$((END_TIME - START_TIME))
     echo -e "${YELLOW}--------------------------------------------------${NC}"
     echo -e "${GREEN}编译完成！总耗时：$((COST_TIME / 60))分$((COST_TIME % 60))秒${NC}"
-    echo -e "${YELLOW}内核文件：${CURRENT_DIR}/${ZIP_NAME}${NC}"
+    echo -e "${YELLOW}内核文件：${GITHUB_WORKSPACE}/${ZIP_NAME}${NC}"
     echo -e "${YELLOW}--------------------------------------------------${NC}"
 }
 
