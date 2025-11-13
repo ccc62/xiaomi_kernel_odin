@@ -1,27 +1,29 @@
 #!/bin/bash
 #
 # Enhanced compile script for Xiaomi_kernel_odin (Automated & Interactive)
+# This script is based on Ubuntu 20.04+
 # Copyright (C) 2023-2025 Ruoqing
 
 # 字体颜色
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
-NC='\033[0m'
+NC='\033[0m' # No Color
 
-# 脚本说明
+# 脚本说明（非交互式模式隐藏）
 if [ "$NON_INTERACTIVE" != "1" ]; then
     echo -e "${YELLOW}==================================================${NC}"
     echo -e "${YELLOW}                脚本说明              ${NC}"
-    echo -e "${YELLOW}             作者: 情若相惜             ${NC}"
+    echo -e "${YELLOW}                                      ${NC}"
+    echo -e "${YELLOW}             作者: 情若相惜 ღ             ${NC}"
     echo -e "${YELLOW}             QQ群：290495721          ${NC}"
     echo -e "${YELLOW}            Ubuntu版本：20.04+         ${NC}"
     echo -e "${YELLOW}==================================================${NC}"
 fi
 
-# 全局变量（关键：CURRENT_DIR 改为 GITHUB_WORKSPACE 根目录）
-CURRENT_DIR="$GITHUB_WORKSPACE"  # 改为根目录，避免 mv same file
-KERNEL_DIR="${CURRENT_DIR}/xiaomi_kernel_odin"
+# 全局变量（路径统一管理）
+CURRENT_DIR=$(pwd)
+KERNEL_DIR="${CURRENT_DIR}"
 CLANG_DIR="${KERNEL_DIR}/scripts/tools/clang-r383902b1"
 GCC64_DIR="${KERNEL_DIR}/scripts/tools/aarch64-linux-android-4.9"
 GCC_DIR="${KERNEL_DIR}/scripts/tools/arm-linux-androideabi-4.9"
@@ -34,15 +36,19 @@ KSU_NEXT_DIR="${KERNEL_DIR}/scripts/tools/root/Kernelsu-next"
 SUKISU_DIR="${KERNEL_DIR}/scripts/tools/root/SukiSU-Ultra"
 MKSU_DIR="${KERNEL_DIR}/scripts/tools/root/MKSU"
 
+# 内核配置（固定defconfig，移除交互式menuconfig）
 DEFCONFIG="odin_defconfig"
 
-# 参数解析
+# 解析命令行参数（-n 非交互式模式）
 NON_INTERACTIVE=0
 while getopts "n" o; do
-    case $o in n) NON_INTERACTIVE=1 ;; *) echo "Usage: $0 [-n]"; exit 1 ;; esac
+    case $o in
+        n) NON_INTERACTIVE=1 ;;
+        *) echo "Usage: $0 [-n]"; exit 1 ;;
+    esac
 done
 
-# ZIP 名称
+# 生成ZIP文件名（兼容Git环境和普通环境）
 if [ -d "${KERNEL_DIR}/.git" ]; then
     GIT_COMMIT_HASH=$(git -C "${KERNEL_DIR}" rev-parse --short=7 HEAD)
     ZIP_NAME="MIX4-5.4.289-g${GIT_COMMIT_HASH}.zip"
@@ -65,11 +71,13 @@ install() {
     fi
 }
 
+# 配置Git用户信息
 email() {
     git config --global user.name "ruoqing501"
     git config --global user.email "liangxiaobo501@gmail.com"
 }
 
+# 环境变量
 path() {
     export KBUILD_BUILD_USER="18201329"
     export KBUILD_BUILD_HOST="qq.com"
@@ -77,11 +85,19 @@ path() {
     export BUILD_ARGS="-j$(nproc) O=out CC=clang ARCH=arm64 SUBARCH=arm64 LD=ld.lld AR=llvm-ar NM=llvm-nm STRIP=llvm-strip OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump READELF=llvm-readelf HOSTCC=clang HOSTCXX=clang++ HOSTAR=llvm-ar HOSTLD=ld.lld CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- LLVM=1 LLVM_IAS=1"
 }
 
+# ROOT方案选择
 root() {
-    choice="${ROOT_CHOICE:-1}"
-    if [ "$NON_INTERACTIVE" != "1" ]; then
-        echo -e "${YELLOW}请选择 ROOT 方式：1-4${NC}"
-        read -p "输入（默认1）：" choice
+    if [ "$NON_INTERACTIVE" = "1" ]; then
+        choice="${ROOT_CHOICE:-1}"
+    else
+        echo -e "${YELLOW}--------------------------------------------------${NC}"
+        echo "请选择启用哪种 ROOT 方式（非交互式请传 ROOT_CHOICE=1-4）："
+        echo -e "${YELLOW}1. Kernelsu-next+susfs${NC}"
+        echo -e "${YELLOW}2. Kernelsu Stable+susfs${NC}"
+        echo -e "${YELLOW}3. SukiSU Ultra+susfs${NC}"
+        echo -e "${YELLOW}4. MKSU Root+susfs${NC}"
+        echo -e "${YELLOW}--------------------------------------------------${NC}"
+        read -p "请输入选项（1/2/3/4，默认1）：" choice
         choice="${choice:-1}"
     fi
 
@@ -92,12 +108,14 @@ root() {
         2) cp -r "${KSU_DIR}/kernelsu" "${ROOT_DIR}"; cp -r "${KSU_DIR}/ksuversion" "${KERNEL_DIR}/ksuversion"; name="Kernelsu Stable+susfs" ;;
         3) cp -r "${SUKISU_DIR}/kernelsu" "${ROOT_DIR}"; name="SukiSU Ultra+susfs"; KPM=1 ;;
         4) cp -r "${MKSU_DIR}/kernelsu" "${ROOT_DIR}"; name="MKSU Root+susfs" ;;
-        *) echo -e "${RED}无效选项！${NC}"; exit 1 ;;
+        *) echo -e "${RED}无效选项，退出...${NC}"; exit 1 ;;
     esac
+
     [ "$NON_INTERACTIVE" != "1" ] && echo -e "${GREEN}启用：$name${NC}"
     export KPM_FLAG=$KPM
 }
 
+# 编译内核
 build() {
     cd "${KERNEL_DIR}"
     echo -e "${YELLOW}生成配置...${NC}"
@@ -114,8 +132,10 @@ build() {
     echo -e "${GREEN}编译耗时：$((END_TIME - START_TIME)) 秒${NC}"
 }
 
+# 打包内核
 package() {
     cd "${KERNEL_DIR}"
+    echo -e "${YELLOW}处理模块...${NC}"
     if grep -q '=m' "out/.config"; then
         make ${BUILD_ARGS} INSTALL_MOD_PATH=modules INSTALL_MOD_STRIP=1 modules_install
         cd "${ANYKERNEL_DIR}"
@@ -137,19 +157,28 @@ package() {
         rm -f patch_linux
     fi
 
-    # ZIP 输出到根目录
-    zip -r9 "${CURRENT_DIR}/${ZIP_NAME}" * -x "out/*" "*/out/*"
-    echo -e "${GREEN}ZIP 已生成：${CURRENT_DIR}/${ZIP_NAME}${NC}"
+    zip -r9 "${ZIP_NAME}" * -x "out/*" "*/out/*"
+    mv "${ZIP_NAME}" "${CURRENT_DIR}"
+
+    END_TIME=$(date +%s)
+    COST_TIME=$((END_TIME - START_TIME))
+    echo -e "${YELLOW}--------------------------------------------------${NC}"
+    echo -e "${GREEN}编译完成！总耗时：$((COST_TIME / 60))分$((COST_TIME % 60))秒${NC}"
+    echo -e "${YELLOW}内核文件：${CURRENT_DIR}/${ZIP_NAME}${NC}"
+    echo -e "${YELLOW}--------------------------------------------------${NC}"
 }
 
+# 清理
 clean() {
     rm -rf "${ANYKERNEL_DIR}/Image"
     rm -rf "${MODULES_DIR}/*"
     rm -rf "${KERNEL_DIR}/ksuversion"
 }
 
+# 主程序
 main() {
-    echo -e "${YELLOW}清理 out 目录...${NC}"
+    # === 方案1：强制清理 out 目录 ===
+    echo -e "${YELLOW}清理旧的 out 目录，防止嵌套...${NC}"
     rm -rf "${KERNEL_DIR}/out"
 
     install
