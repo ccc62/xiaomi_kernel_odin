@@ -82,7 +82,8 @@ path() {
     export KBUILD_BUILD_USER="18201329"
     export KBUILD_BUILD_HOST="qq.com"
     export PATH="${CLANG_DIR}/bin:${GCC64_DIR}/bin:${GCC_DIR}/bin:$PATH"
-    export BUILD_ARGS="-j$(nproc) O=out CC=clang ARCH=arm64 SUBARCH=arm64 LD=ld.lld AR=llvm-ar NM=llvm-nm STRIP=llvm-strip OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump READELF=llvm-readelf HOSTCC=clang HOSTCXX=clang++ HOSTAR=llvm-ar HOSTLD=ld.lld CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- LLVM=1 LLVM_IAS=1"
+    # 修复 OOM：固定 -j1
+    export BUILD_ARGS="-j1 O=out CC=clang ARCH=arm64 SUBARCH=arm64 LD=ld.lld AR=llvm-ar NM=llvm-nm STRIP=llvm-strip OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump READELF=llvm-readelf HOSTCC=clang HOSTCXX=clang++ HOSTAR=llvm-ar HOSTLD=ld.lld CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- LLVM=1 LLVM_IAS=1"
 }
 
 # ROOT方案选择
@@ -180,6 +181,11 @@ main() {
     # === 方案1：强制清理 out 目录 ===
     echo -e "${YELLOW}清理旧的 out 目录，防止嵌套...${NC}"
     rm -rf "${KERNEL_DIR}/out"
+
+    # 启用 ccache
+    export USE_CCACHE=1
+    ccache -M 10G
+    ccache -z
 
     install
     email
