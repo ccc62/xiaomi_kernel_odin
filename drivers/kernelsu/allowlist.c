@@ -421,7 +421,11 @@ void persistent_allow_list()
         goto put_task;
     }
     cb->func = do_persistent_allow_list;
+    #ifdef TWA_RESUME
     task_work_add(tsk, cb, TWA_RESUME);
+    #else
+    task_work_add(tsk, cb, 0);
+    #endif
 
 put_task:
     put_task_struct(tsk);
