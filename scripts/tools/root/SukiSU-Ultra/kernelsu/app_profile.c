@@ -76,7 +76,9 @@ void disable_seccomp(void)
 #ifdef CONFIG_SECCOMP
 	current->seccomp.mode = 0;
 	current->seccomp.filter = NULL;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,8,0)  // 添加这个宏以兼容内核 5.4（无 filter_count 成员）
 	atomic_set(&current->seccomp.filter_count, 0);
+#endif
 #else
 #endif
 }
