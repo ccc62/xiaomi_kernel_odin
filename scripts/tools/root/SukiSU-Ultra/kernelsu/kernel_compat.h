@@ -13,7 +13,11 @@
 static long ksu_copy_from_user_retry(void *to, 
         const void __user *from, unsigned long count)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,8,0)
     long ret = copy_from_user_nofault(to, from, count);
+#else
+    long ret = copy_from_user(to, from, count);  // 在旧内核 fallback 到标准函数
+#endif
     if (likely(!ret))
         return ret;
 
@@ -21,7 +25,7 @@ static long ksu_copy_from_user_retry(void *to,
     return copy_from_user(to, from, count);
 }
 
-// 新添加：兼容 strncpy_from_user_nofault
+// 新添加：兼容 strncpy_from_user_nofault（保持不变）
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5,8,0)
 #define ksu_strncpy_from_user_nofault strncpy_from_user_nofault
 #else
