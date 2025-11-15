@@ -19,6 +19,7 @@
 
 
 #include "sulog.h"
+#include "kernel_compat.h"  // 添加这个包含（如果已存在则忽略）
 
 #define SU_PATH "/system/bin/su"
 #define SH_PATH "/system/bin/sh"
@@ -80,7 +81,7 @@ int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
 
     char path[sizeof(su) + 1];
     memset(path, 0, sizeof(path));
-    strncpy_from_user_nofault(path, *filename_user, sizeof(path));
+    ksu_strncpy_from_user_nofault(path, *filename_user, sizeof(path));  // 已替换
 
     if (unlikely(!memcmp(path, su, sizeof(su)))) {
 #if __SULOG_GATE
@@ -122,7 +123,7 @@ int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
     pr_info("vfs_statx su->sh!\n");
     memcpy((void *)filename->name, sh, sizeof(sh));
 #else
-    strncpy_from_user_nofault(path, *filename_user, sizeof(path));
+    ksu_strncpy_from_user_nofault(path, *filename_user, sizeof(path));  // 已替换
 
     if (unlikely(!memcmp(path, su, sizeof(su)))) {
 #if __SULOG_GATE
@@ -147,7 +148,7 @@ int ksu_handle_execve_sucompat(const char __user **filename_user,
         return 0;
 
     memset(path, 0, sizeof(path));
-    strncpy_from_user_nofault(path, *filename_user, sizeof(path));
+    ksu_strncpy_from_user_nofault(path, *filename_user, sizeof(path));  // 已替换
 
     if (likely(memcmp(path, su, sizeof(su))))
         return 0;

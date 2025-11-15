@@ -21,4 +21,11 @@ static long ksu_copy_from_user_retry(void *to,
     return copy_from_user(to, from, count);
 }
 
+// 新添加：兼容 strncpy_from_user_nofault
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,8,0)
+#define ksu_strncpy_from_user_nofault strncpy_from_user_nofault
+#else
+#define ksu_strncpy_from_user_nofault strncpy_from_user
+#endif
+
 #endif
